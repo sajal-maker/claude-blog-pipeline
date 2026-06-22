@@ -1,0 +1,8 @@
+# Runtime data written by the commands (per-user, not part of the plugin)
+brand-profiles/
+blog-drafts/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
