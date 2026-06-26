@@ -32,13 +32,55 @@ Write a 900–1500 word article in the brand voice. Derive: SEO title (<=60 char
 ## === Phase 4: Generate banner ===
 Build a prompt from the brand palette (use the actual hex) + topic: wide 21:9 editorial hero, negative space on one side for a headline, no embedded text. Generate with an image-gen MCP (e.g. Higgsfield `generate_image`, widest aspect ratio). Set the draft's `hero_image` to the result URL and refine `hero_alt`. If no image MCP is connected, output the prompt and leave a placeholder — keep going.
 
-## === Phase 5: Build the JSON ===
-Assemble the draft into blog CMS JSON. Structure:
-- Wrapper `{ "id": "blog_<ULID>", "name": <title>, "handle": <slug>, "content": { "root": "page", "elements": {...} } }`; URL `/blog/<handle>`; root type `Page` (no Nav/Footer).
-- 3 children with tracking_ids: `hero` (ContentSection `text-over-image`, `aspectRatio: "21/9"`, `sectionPadding: "hero"`), `article` (ContentSection `simple`, `textAlign: "left"`, `sectionPadding: "sm"`; its `description` is the full HTML article — inline brand-scoped `<style>`, two-column 680px + 250px sticky aside collapsing <980px, H2/H3 sections, read-more + product callouts, FAQ, author card, dark newsletter panel using `darkPanel` hex, aside share links to `https://<domain>/blog/<handle>`), and `products` (BlogSection `grid`, `aspectRatio: "4/3"`, title "You May Also Like", `viewAll` -> `/blog`, 3 items -> `/collections/<handle>`).
-- ContentSection items: `{ id, title, description, image, imageAlt?, badge?, eyebrow?, subheading?, cta?, aspectRatio? }`; `cta.href` not `cta.url`. BlogSection items: `{ id, title, image, imageAlt?, href }`. Use ONLY these props.
-- Validate: `/collections/<handle>` everywhere, no `headingLevel`, exact brand hex, alt text on every image, valid JSON. Print the COMPLETE JSON in one block and save to `~/.claude/blog-pipeline/blog-drafts/<brand-slug>__<slug>.json`.
+# Phase 5: Build the JSON
 
+Assemble the draft into blog CMS JSON.
+
+### Wrapper
+```
+{ "id": "blog_<ULID>", "name": <title>, "handle": <slug>,
+  "content": { "root": "page", "elements": { ... } } }
+```
+- URL = `/blog/<handle>`. Root element key `page`, type `Page` (NO Nav/Footer — the site shell provides them).
+- `page.children` = `["hero", "article", "products"]`.
+- Every section element carries `"children": []` AND a `tracking_id`. The element KEY and the `tracking_id` are different strings — do not reuse the key:
+
+| Element key | type | tracking_id |
+|-------------|------|-------------|
+| `hero` | ContentSection | `blog_article_hero` |
+| `article` | ContentSection | `blog_article_body` |
+| `products` | BlogSection | `blog_you_may_also_like` |
+
+### 1. `hero` — ContentSection
+- Props: `layout: "text-over-image"`, `aspectRatio: "21/9"`, `sectionPadding: "hero"`.
+- Single item: `{ id, badge, eyebrow, title, subheading, description, cta, image, imageAlt, textColor, backgroundColor }`.
+  - `title` = SEO question-style H1. `subheading` = one-liner.
+  - `description` = **byline HTML only**, e.g. `<p><strong><Brand> Journal</strong> · <Date></p>` — not prose.
+  - `backgroundColor` = semi-transparent rgba over the image (e.g. `rgba(255,248,251,.88)`) + `textColor` for legibility. **Both are required here.**
+  - `cta.href` → a `/collections/<handle>`. Use `cta.href`, never `cta.url`.
+- **Exempt from the 2-tier heading rule.** badge + eyebrow + title + subheading + description on the hero is intentional — do NOT strip tiers.
+
+### 2. `article` — ContentSection
+- Props: `layout: "simple"`, `textAlign: "left"`, `sectionPadding: "sm"`.
+- Single item = `{ id, description }` only. `description` is the FULL HTML article:
+  - Inline `<style>` with **brand-scoped class prefix** (`.<brand>-*`) so styles never collide.
+  - Two-column grid `minmax(0,680px) 250px`: main `<article>` + sticky `<aside>`, collapsing to one column `<980px`.
+  - Order: `<header>` meta (category span, `<h1>`, byline) → intro → keyword `<h2>`/`<h3>` sections → 2+ `.read-more` callouts → 1+ `.image-callout` (product img + `<small>`) → FAQ `<h2>` with question `<h3>`s → author card → dark newsletter panel (bg = `darkPanel` hex) → aside (share links → `https://<domain>/blog/<handle>`, Popular Posts, tip card).
+  - All accents/links use the `accent` hex; light fills use `tint`; dark panel uses `darkPanel`. Reuse the EXACT profile hex everywhere.
+
+### 3. `products` — BlogSection
+- Props: `layout: "grid"`, `textAlign: "left"`, `aspectRatio: "4/3"`, `sectionPadding: "sm"`, `title: "You May Also Like"`, `subtitle`, `viewAll: { href: "/blog", label }`.
+- 3 items, each: `{ id, title, description, image, imageAlt, href, date, author, category }`.
+  - `href` → `/collections/<handle>`. `date` = `<Brand> Journal`. `author` = `<Brand>`. `category` = a short label.
+  - `description`, `date`, `author`, `category` render the card chrome — do NOT omit them or cards render bare.
+
+### Validate before output
+- `/collections/<handle>` everywhere — never `/category-view/` or `/collection-view/`.
+- No `headingLevel` prop on any element.
+- Exact brand hex (`accent` / `tint` / `darkPanel`) reused throughout — no near-matches.
+- Descriptive `imageAlt` on every image (hero, in-article callouts, all 3 product cards).
+- Each section has `"children": []` and the correct `tracking_id`.
+- Valid JSON — no trailing commas, all keys in `page.children` exist in `elements`.
 ## === Phase 6: Score + infographic ===
 Score 0–100 weighted: keyword targeting (20), meta & slug (10), structure/readability (15), internal linking (15), content depth (15), media & alt text (10), brand compliance (15). Give each dimension a score + one-line reason + the top fix if below full. If a visualization MCP is available, render an on-brand scorecard (bars in the `accent` hex, total with red/amber/green band, top-3 fixes); otherwise output a markdown table.
 
